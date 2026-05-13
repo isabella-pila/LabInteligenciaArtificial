@@ -1,0 +1,2 @@
+Taxa de Acerto (Padrão): 100.00%
+Taxa de Acerto (Momentum): 100.00%

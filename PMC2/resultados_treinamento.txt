@@ -1,0 +1,9 @@
+Treinamento Padrão:
+Épocas: 25203
+EQM Final: 0.028284
+Tempo de Processamento: 6.012 segundos
+
+Treinamento com Momentum (0.9):
+Épocas: 5228
+EQM Final: 0.019362
+Tempo de Processamento: 0.981 segundos
