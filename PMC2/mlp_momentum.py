@@ -11,15 +11,14 @@ def sigmoid_deriv(x):
     return x * (1.0 - x)
 
 class MLP:
-    def __init__(self, input_size, hidden_size, output_size, learning_rate=0.1, momentum=0.0):
+    def __init__(self, input_size, hidden_size, output_size, learning_rate=0.1, momentum=0.9):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.learning_rate = learning_rate
         self.momentum = momentum
-        
-        # Initialize weights between 0 and 1
-        np.random.seed(42) # Ensure reproducibility if called multiple times identically
+
+        # Initialize weights randomly between 0 and 1
         self.W1 = np.random.rand(self.input_size, self.hidden_size)
         self.b1 = np.random.rand(self.hidden_size)
         self.W2 = np.random.rand(self.hidden_size, self.output_size)
@@ -106,9 +105,9 @@ def main():
     X_test = test_df[['x1', 'x2', 'x3', 'x4']].values
     y_test = test_df[['d1', 'd2', 'd3']].values
     
-    # We need identical initial weights for both
-    # We will initialize a dummy MLP, extract weights and assign to both.
+    # We need identical initial weights for both comparisons
     hidden_size = 5
+    np.random.seed(42)
     dummy_mlp = MLP(4, hidden_size, 3)
     W1_init, b1_init, W2_init, b2_init = dummy_mlp.get_weights()
     

@@ -18,7 +18,7 @@ class MLP:
         self.output_size = output_size
         self.learning_rate = learning_rate
         
-        # Initialize weights between 0 and 1
+        # Initialize weights randomly between 0 and 1
         self.W1 = np.random.rand(self.input_size, self.hidden_size)
         self.b1 = np.random.rand(self.hidden_size)
         self.W2 = np.random.rand(self.hidden_size, self.output_size)
