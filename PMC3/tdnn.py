@@ -18,19 +18,23 @@ class TDNN:
         self.learning_rate = learning_rate
         self.momentum = momentum
         
-        # Will be initialized externally per training
-        self.W1 = None
-        self.b1 = None
-        self.W2 = None
-        self.b2 = None
+        # Initialize weights randomly between 0 and 1 by default
+        self.W1 = np.random.rand(self.input_size, self.hidden_size)
+        self.b1 = np.random.rand(self.hidden_size)
+        self.W2 = np.random.rand(self.hidden_size, self.output_size)
+        self.b2 = np.random.rand(self.output_size)
         
-        self.v_W1 = None
-        self.v_b1 = None
-        self.v_W2 = None
-        self.v_b2 = None
+        self.v_W1 = np.zeros_like(self.W1)
+        self.v_b1 = np.zeros_like(self.b1)
+        self.v_W2 = np.zeros_like(self.W2)
+        self.v_b2 = np.zeros_like(self.b2)
 
-    def init_weights(self, seed):
-        np.random.seed(seed)
+    def init_weights(self, seed=None):
+        """
+        Re-initializes weights, optionally resetting the seed.
+        """
+        if seed is not None:
+            np.random.seed(seed)
         self.W1 = np.random.rand(self.input_size, self.hidden_size)
         self.b1 = np.random.rand(self.hidden_size)
         self.W2 = np.random.rand(self.hidden_size, self.output_size)
@@ -100,6 +104,47 @@ def prepare_data(series, p):
         y.append(series[i+p])
     return np.array(X), np.array(y).reshape(-1, 1)
 
+def plot_eqm_curves(best_runs, topologies, filename='graficos_eqm_topologias.png'):
+    """
+    Decoupled plotting function to visualize training Mean Squared Error for all topologies.
+    """
+    fig, axes = plt.subplots(3, 1, figsize=(8, 12))
+    for idx, topo in enumerate(topologies):
+        name = topo['name']
+        best_run = best_runs[name]
+        axes[idx].plot(best_run['mse_history'], color='#1f77b4', linewidth=2)
+        axes[idx].set_title(f"{name} - {best_run['T']} (EQM Final: {best_run['eqm_final']:.6f})", fontsize=12, fontweight='bold')
+        axes[idx].set_xlabel("Épocas", fontsize=10)
+        axes[idx].set_ylabel("EQM", fontsize=10)
+        axes[idx].grid(True, linestyle='--', alpha=0.7)
+        
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+    print(f"\nGráficos de EQM salvos em {filename}")
+
+def plot_predictions(best_runs, topologies, test_series, t_axis, filename='graficos_estimativas_topologias.png'):
+    """
+    Decoupled plotting function to visualize Desired vs Predicted values for all topologies.
+    """
+    fig, axes = plt.subplots(3, 1, figsize=(8, 12))
+    for idx, topo in enumerate(topologies):
+        name = topo['name']
+        best_run = best_runs[name]
+        
+        axes[idx].plot(t_axis, test_series, label="Desejado", marker='o', color='#2ca02c', linewidth=2)
+        axes[idx].plot(t_axis, best_run['y_pred'], label="Estimado", marker='x', color='#d62728', linestyle='--', linewidth=2)
+        axes[idx].set_title(f"{name} - {best_run['T']} Estimativas", fontsize=12, fontweight='bold')
+        axes[idx].set_xlabel("Tempo (t)", fontsize=10)
+        axes[idx].set_ylabel("f(t)", fontsize=10)
+        axes[idx].legend(fontsize=10)
+        axes[idx].grid(True, linestyle='--', alpha=0.7)
+        
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+    print(f"\nGráficos de estimativas salvos em {filename}")
+
 def main():
     train_df = pd.read_csv('treinamento.csv')
     test_df = pd.read_csv('teste.csv')
@@ -117,7 +162,7 @@ def main():
     results = {}
     
     # Run trainings
-    # We will use fixed seeds for reproducibility across T1, T2, T3
+    # We will use fixed seeds outside the class for reproducibility across T1, T2, T3
     seeds = [42, 100, 2024]
     
     for topo in topologies:
@@ -131,7 +176,6 @@ def main():
         full_series = np.concatenate((train_series, test_series))
         # Test targets are at indices 100 to 119
         # So we create test inputs starting from index 100-p
-        # e.g. for predicting index 100 (which is t=101), we need full_series[100-p:100]
         X_test = []
         y_test = []
         for i in range(100 - p, 120 - p):
@@ -152,7 +196,8 @@ def main():
             
             # Evaluate on test
             y_pred = tdnn.forward(X_test)
-            # Erro relativo médio = mean(|y_des - y_pred| / y_des)
+            
+            # Vectorized Erro relativo médio = mean(|y_des - y_pred| / y_des)
             errors = np.abs(y_test - y_pred) / y_test
             err_rel_med = np.mean(errors)
             variancia = np.var(errors)
@@ -168,24 +213,17 @@ def main():
             })
             print(f"  T{t_idx+1} concluido. Épocas: {epochs}, EQM: {mse_history[-1]:.6f}")
 
-    # Generate EQM plot for best training per topology
-    # Best training is the one with the lowest err_rel_med (or lowest EQM on training?). The prompt asks for "melhor treinamento realizado em cada uma delas". Usually it means lowest MSE on training or best generalization. I will select the one with lowest err_rel_med on test. Wait, the problem says "considerando o melhor treinamento {T1, T2 ou T3} realizado em cada uma". Let's pick the one with lowest EQM final.
-    fig_eqm, axes_eqm = plt.subplots(3, 1, figsize=(8, 12))
-    
-    # Generate Desired vs Estimated plot for best training
-    fig_est, axes_est = plt.subplots(3, 1, figsize=(8, 12))
-    
-    t_axis = np.arange(101, 121)
-    
+    # Identify best runs per topology to plot
+    best_runs = {}
     table_2_rows = []
-    val_table = {}
     
-    for topo_idx, topo in enumerate(topologies):
+    for topo in topologies:
         name = topo['name']
         res = results[name]
         
         # Sort to find best by lowest EQM final
         best_run = sorted(res, key=lambda x: x['eqm_final'])[0]
+        best_runs[name] = best_run
         
         # Fill table 2
         table_2_rows.append({
@@ -194,33 +232,15 @@ def main():
             "T2_EQM": res[1]['eqm_final'], "T2_Epocas": res[1]['epochs'],
             "T3_EQM": res[2]['eqm_final'], "T3_Epocas": res[2]['epochs'],
         })
-        
-        # Val table columns
-        for i in range(3):
-            val_table[f"{name}_T{i+1}"] = res[i]['y_pred']
-            
-        # Plot EQM
-        axes_eqm[topo_idx].plot(best_run['mse_history'], color='blue')
-        axes_eqm[topo_idx].set_title(f"{name} - {best_run['T']} (EQM Final: {best_run['eqm_final']:.6f})")
-        axes_eqm[topo_idx].set_xlabel("Épocas")
-        axes_eqm[topo_idx].set_ylabel("EQM")
-        axes_eqm[topo_idx].grid(True)
-        
-        # Plot Desired vs Estimated
-        axes_est[topo_idx].plot(t_axis, test_series, label="Desejado", marker='o')
-        axes_est[topo_idx].plot(t_axis, best_run['y_pred'], label="Estimado", marker='x')
-        axes_est[topo_idx].set_title(f"{name} - {best_run['T']} Estimativas")
-        axes_est[topo_idx].set_xlabel("Tempo (t)")
-        axes_est[topo_idx].set_ylabel("f(t)")
-        axes_est[topo_idx].legend()
-        axes_est[topo_idx].grid(True)
-        
-    fig_eqm.tight_layout()
-    fig_eqm.savefig('graficos_eqm_topologias.png')
+
+    # Plot EQM (Decoupled call)
+    plot_eqm_curves(best_runs, topologies, 'graficos_eqm_topologias.png')
     
-    fig_est.tight_layout()
-    fig_est.savefig('graficos_estimativas_topologias.png')
+    # Plot Desired vs Estimated (Decoupled call)
+    t_axis = np.arange(101, 121)
+    plot_predictions(best_runs, topologies, test_series, t_axis, 'graficos_estimativas_topologias.png')
     
+    # Generate and save tables
     df_table2 = pd.DataFrame(table_2_rows)
     df_table2.to_csv("tabela_treinamentos.csv", index=False)
     
@@ -228,9 +248,9 @@ def main():
     
     for name in ["Rede 1", "Rede 2", "Rede 3"]:
         for i in range(3):
-            df_val[f"{name}_T{i+1}"] = val_table[f"{name}_T{i+1}"]
+            df_val[f"{name}_T{i+1}"] = results[name][i]['y_pred']
             
-    # Calculate Erro Relativo Médio and Variance
+    # Fully vectorized structure for relative errors and variances rows
     er_med = ["Erro Relativo Médio:", ""]
     vari = ["Variância:", ""]
     for name in ["Rede 1", "Rede 2", "Rede 3"]:
@@ -242,6 +262,7 @@ def main():
     df_val.loc[len(df_val)] = vari
     
     df_val.to_csv("tabela_validacao.csv", index=False)
+    print("\nTabelas de treinamento e validação salvas com sucesso.")
 
 if __name__ == '__main__':
     main()

@@ -88,6 +88,34 @@ class MLP:
         return mse_history, epochs
 
 
+def plot_eqm_curves(results, filename='graficos_eqm.png'):
+    """
+    Decoupled plotting function to visualize Mean Squared Error curves.
+    """
+    # Sort to find the two trainings with the largest number of epochs
+    results_sorted = sorted(results, key=lambda x: x['epochs'], reverse=True)
+    t_a = results_sorted[0]
+    t_b = results_sorted[1]
+    
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    
+    axes[0].plot(t_a['mse_hist'], color='#1f77b4', linewidth=2)
+    axes[0].set_title(f"EQM vs Épocas - {t_a['training']} ({t_a['epochs']} épocas)", fontsize=12, fontweight='bold')
+    axes[0].set_xlabel("Épocas", fontsize=10)
+    axes[0].set_ylabel("EQM", fontsize=10)
+    axes[0].grid(True, linestyle='--', alpha=0.7)
+    
+    axes[1].plot(t_b['mse_hist'], color='#ff7f0e', linewidth=2)
+    axes[1].set_title(f"EQM vs Épocas - {t_b['training']} ({t_b['epochs']} épocas)", fontsize=12, fontweight='bold')
+    axes[1].set_xlabel("Épocas", fontsize=10)
+    axes[1].set_ylabel("EQM", fontsize=10)
+    axes[1].grid(True, linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+    print(f"\nGráficos de EQM salvos em {filename}")
+
 def main():
     # Load data
     train_df = pd.read_csv('treinamento.csv')
@@ -100,14 +128,12 @@ def main():
     y_test = test_df[['d']].values
     
     num_trainings = 5
-    hidden_size = 5 # Standard guess since the figure is missing
+    hidden_size = 5
     results = []
-    
-    best_models = []
     
     for t in range(num_trainings):
         print(f"Starting Training T{t+1}")
-        # Fix seed for reproducibility
+        # Fix seed for reproducibility outside the model class
         np.random.seed(42 + t)
         
         mlp = MLP(input_size=3, hidden_size=hidden_size, output_size=1, learning_rate=0.1)
@@ -134,71 +160,44 @@ def main():
     print("\nTabela de Treinamentos salva em resultados_treinamento.csv")
     print(res_df.to_string(index=False))
     
-    # Part 3: Plot for the two trainings with largest number of epochs
-    results.sort(key=lambda x: x['epochs'], reverse=True)
-    t_a = results[0]
-    t_b = results[1]
+    # Part 3: Decoupled Plotting for the two trainings with largest number of epochs
+    plot_eqm_curves(results, 'graficos_eqm.png')
     
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].plot(t_a['mse_hist'])
-    axes[0].set_title(f"EQM vs Épocas - {t_a['training']} ({t_a['epochs']} épocas)")
-    axes[0].set_xlabel("Épocas")
-    axes[0].set_ylabel("EQM")
-    axes[0].grid(True)
-    
-    axes[1].plot(t_b['mse_hist'])
-    axes[1].set_title(f"EQM vs Épocas - {t_b['training']} ({t_b['epochs']} épocas)")
-    axes[1].set_xlabel("Épocas")
-    axes[1].set_ylabel("EQM")
-    axes[1].grid(True)
-    
-    plt.tight_layout()
-    plt.savefig('graficos_eqm.png')
-    print("\nGráficos salvos em graficos_eqm.png")
-    
-    # Part 5: Validation on test set
-    # Sort back to T1, T2...
+    # Part 5: Vectorized Validation on test set
     results.sort(key=lambda x: x['training'])
     
-    val_table = []
+    # Fully vectorized construction of the validation DataFrame
+    val_data = {
+        'Amostra': np.arange(1, len(y_test) + 1),
+        'x1': X_test[:, 0],
+        'x2': X_test[:, 1],
+        'x3': X_test[:, 2],
+        'd': y_test[:, 0]
+    }
     
-    for i in range(len(y_test)):
-        row = {
-            'Amostra': i+1,
-            'x1': X_test[i][0],
-            'x2': X_test[i][1],
-            'x3': X_test[i][2],
-            'd': y_test[i][0],
-        }
-        for j, r in enumerate(results):
-            row[f"yrede(T{j+1})"] = r['y_pred'][i]
-        val_table.append(row)
-        
-    val_df = pd.DataFrame(val_table)
-    
-    # Calculate Erro Relativo Médio (%) and Variância (%)
-    # Erro relativo = |y_pred - d| / d * 100
-    er_med = {}
-    er_var = {}
     for j, r in enumerate(results):
-        preds = r['y_pred']
-        errors = np.abs(preds - y_test.flatten()) / y_test.flatten() * 100
-        er_med[f"yrede(T{j+1})"] = np.mean(errors)
-        er_var[f"yrede(T{j+1})"] = np.var(errors)
+        val_data[f"yrede(T{j+1})"] = r['y_pred']
         
-    er_row = {'Amostra': 'Erro Relativo Médio (%)', 'x1': '', 'x2': '', 'x3': '', 'd': ''}
-    er_row.update(er_med)
+    val_df = pd.DataFrame(val_data)
     
+    # Fully vectorized computation of Average Relative Error (%) and Variance (%)
+    er_med = {'Amostra': 'Erro Relativo Médio (%)', 'x1': '', 'x2': '', 'x3': '', 'd': ''}
     var_row = {'Amostra': 'Variância (%)', 'x1': '', 'x2': '', 'x3': '', 'd': ''}
-    var_row.update(er_var)
     
-    val_df = pd.concat([val_df, pd.DataFrame([er_row, var_row])], ignore_index=True)
+    for j, r in enumerate(results):
+        # Relative error = |y_pred - d| / d * 100
+        errors = np.abs(r['y_pred'] - y_test.flatten()) / y_test.flatten() * 100
+        col_name = f"yrede(T{j+1})"
+        er_med[col_name] = np.mean(errors)
+        var_row[col_name] = np.var(errors)
+        
+    val_df = pd.concat([val_df, pd.DataFrame([er_med, var_row])], ignore_index=True)
     
     val_df.to_csv('validacao.csv', index=False)
     print("\nTabela de Validação salva em validacao.csv")
     print(val_df.to_string(index=False))
-
-    # Identify best
+ 
+    # Identify best generalizer
     best_idx = np.argmin([er_med[f"yrede(T{j+1})"] for j in range(num_trainings)])
     print(f"\nMelhor configuração para generalização: T{best_idx+1}")
 

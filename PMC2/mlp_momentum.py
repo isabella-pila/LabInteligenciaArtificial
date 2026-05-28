@@ -94,6 +94,58 @@ class MLP:
         elapsed = time.time() - start_time
         return mse_history, epochs, elapsed
 
+def plot_eqm_curves(mse_std, mse_mom, ep_std, ep_mom, filename='graficos_eqm.png'):
+    """
+    Decoupled plotting function to visualize Mean Squared Error curves side by side.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    axes[0].plot(mse_std, color='#1f77b4', linewidth=2)
+    axes[0].set_title(f"Padrão sem Momentum\n({ep_std} épocas)", fontsize=12, fontweight='bold')
+    axes[0].set_xlabel("Épocas", fontsize=10)
+    axes[0].set_ylabel("Erro Quadrático Médio (EQM)", fontsize=10)
+    axes[0].grid(True, linestyle='--', alpha=0.7)
+    
+    axes[1].plot(mse_mom, color='#d62728', linewidth=2)
+    axes[1].set_title(f"Com Momentum = 0.9\n({ep_mom} épocas)", fontsize=12, fontweight='bold')
+    axes[1].set_xlabel("Épocas", fontsize=10)
+    axes[1].set_ylabel("Erro Quadrático Médio (EQM)", fontsize=10)
+    axes[1].grid(True, linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+    plt.close()
+    print(f"\nGráficos de comparação salvos em {filename}")
+
+def evaluate(model, X_test, y_test, name):
+    """
+    Decoupled, fully vectorized validation evaluation and table generation.
+    """
+    y_pred_raw = model.forward(X_test)
+    y_pred_rounded = np.round(y_pred_raw).astype(int)
+    
+    # Vectorized accuracy: check rows where all elements match targets exactly
+    matches = np.all(y_pred_rounded == y_test, axis=1)
+    acc = np.mean(matches) * 100
+    
+    # Vectorized construction of DataFrame
+    df = pd.DataFrame({
+        'Amostra': np.arange(1, len(y_test) + 1),
+        'x1': X_test[:, 0],
+        'x2': X_test[:, 1],
+        'x3': X_test[:, 2],
+        'x4': X_test[:, 3],
+        'd1': y_test[:, 0],
+        'd2': y_test[:, 1],
+        'd3': y_test[:, 2],
+        'y1': y_pred_rounded[:, 0],
+        'y2': y_pred_rounded[:, 1],
+        'y3': y_pred_rounded[:, 2]
+    })
+    
+    df.to_csv(f'validacao_{name}.csv', index=False)
+    return acc
+
 def main():
     # 1. Load Data
     train_df = pd.read_csv('treinamento.csv')
@@ -107,6 +159,8 @@ def main():
     
     # We need identical initial weights for both comparisons
     hidden_size = 5
+    
+    # Establish stochastic/random starting weights using a clean seed setup outside MLP class
     np.random.seed(42)
     dummy_mlp = MLP(4, hidden_size, 3)
     W1_init, b1_init, W2_init, b2_init = dummy_mlp.get_weights()
@@ -139,64 +193,12 @@ def main():
         f.write(f"EQM Final: {mse_mom[-1]:.6f}\n")
         f.write(f"Tempo de Processamento: {time_mom:.3f} segundos\n")
         
-    # Plotting
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    # Plotting (Decoupled call)
+    plot_eqm_curves(mse_std, mse_mom, ep_std, ep_mom, 'graficos_eqm.png')
     
-    axes[0].plot(mse_std, color='blue')
-    axes[0].set_title(f"Padrão sem Momentum\n({ep_std} épocas)")
-    axes[0].set_xlabel("Épocas")
-    axes[0].set_ylabel("Erro Quadrático Médio (EQM)")
-    axes[0].grid(True)
-    
-    axes[1].plot(mse_mom, color='red')
-    axes[1].set_title(f"Com Momentum = 0.9\n({ep_mom} épocas)")
-    axes[1].set_xlabel("Épocas")
-    axes[1].set_ylabel("Erro Quadrático Médio (EQM)")
-    axes[1].grid(True)
-    
-    plt.tight_layout()
-    plt.savefig('graficos_eqm.png')
-    
-    # 5. Validation on test set (we only care about one of the networks, let's use the momentum one since it's probably better or we evaluate both?)
-    # "após o pós-processamento do conjunto de teste... Forneça a taxa de acerto (%) entre os valores desejados e os valores fornecidos pela rede (após o pós-processamento)".
-    # It says "Faça a validação da rede...". Which network? Usually the one with momentum if it converged better, or we can just present validation for both.
-    # The prompt actually says: "Para os dois treinamentos realizados acima, trace os respectivos gráficos... 3. implemente a rotina... 4. Faça a validação da rede..."
-    # Usually it implies we validate the "best" one or we present validation for both. I'll do it for the momentum one. Wait, let's evaluate for both just in case, or pick the best one.
-    
-    def evaluate(model, name):
-        y_pred_raw = model.forward(X_test)
-        y_pred_rounded = np.round(y_pred_raw).astype(int)
-        
-        correct = 0
-        for i in range(len(y_test)):
-            if np.array_equal(y_pred_rounded[i], y_test[i]):
-                correct += 1
-        
-        acc = (correct / len(y_test)) * 100
-        
-        # Save table
-        res_table = []
-        for i in range(len(y_test)):
-            res_table.append({
-                'Amostra': i+1,
-                'x1': X_test[i][0],
-                'x2': X_test[i][1],
-                'x3': X_test[i][2],
-                'x4': X_test[i][3],
-                'd1': y_test[i][0],
-                'd2': y_test[i][1],
-                'd3': y_test[i][2],
-                'y1': y_pred_rounded[i][0],
-                'y2': y_pred_rounded[i][1],
-                'y3': y_pred_rounded[i][2]
-            })
-            
-        df = pd.DataFrame(res_table)
-        df.to_csv(f'validacao_{name}.csv', index=False)
-        return acc
-
-    acc_std = evaluate(mlp_std, "padrao")
-    acc_mom = evaluate(mlp_mom, "momentum")
+    # 5. Validation on test set (fully vectorized evaluation)
+    acc_std = evaluate(mlp_std, X_test, y_test, "padrao")
+    acc_mom = evaluate(mlp_mom, X_test, y_test, "momentum")
     
     with open("resultados_validacao.txt", "w") as f:
         f.write(f"Taxa de Acerto (Padrão): {acc_std:.2f}%\n")

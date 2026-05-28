@@ -1,9 +1,9 @@
-Treinamento Padr„o:
-…pocas: 25203
+Treinamento Padr√£o:
+√âpocas: 25203
 EQM Final: 0.028284
-Tempo de Processamento: 6.012 segundos
+Tempo de Processamento: 2.476 segundos
 
 Treinamento com Momentum (0.9):
-…pocas: 5228
+√âpocas: 5228
 EQM Final: 0.019362
-Tempo de Processamento: 0.981 segundos
+Tempo de Processamento: 0.521 segundos

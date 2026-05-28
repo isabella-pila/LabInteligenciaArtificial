@@ -1,2 +1,2 @@
-Taxa de Acerto (Padr„o): 100.00%
+Taxa de Acerto (Padr√£o): 100.00%
 Taxa de Acerto (Momentum): 100.00%
